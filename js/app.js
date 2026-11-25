@@ -18,6 +18,7 @@ const state = {
   dashPage: 1,
   modal: null,
   loginError: "",
+  access: null,
   adminTab: "teachers",
   importLevel: "",
   adminQ: "",
@@ -188,7 +189,87 @@ function render() {
   document.title = pageMeta(state.page).title + " · EDU APP TRACKER";
 }
 
+function renderAccess() {
+  const access = state.access;
+  const me = Api.profile();
+  const error = access.error ? '<p class="error" role="alert">' + esc(access.error) + "</p>" : "";
+  const other = '<button type="button" class="btn secondary" data-action="logout">ใช้บัญชีอื่น</button>';
+  if (access.pending) {
+    return (
+      "<h2>รอการอนุมัติ</h2>" +
+      '<p class="sub" role="status">ส่งคำขอสิทธิ์ของ <strong>' +
+      esc(me.email) +
+      "</strong> แล้ว เมื่อผู้ดูแลระบบอนุมัติแล้ว กดตรวจสอบอีกครั้งเพื่อเข้าใช้งาน</p>" +
+      error +
+      '<div class="btn-row"><button type="button" class="btn" data-action="retry-load">ตรวจสอบอีกครั้ง</button>' +
+      other +
+      "</div>"
+    );
+  }
+  return (
+    "<h2>ขอสิทธิ์ใช้งาน</h2>" +
+    '<p class="sub">บัญชี <strong>' +
+    esc(me.email) +
+    "</strong> ยังไม่ได้รับสิทธิ์ใช้งาน กรอกชื่อแล้วกดขอสิทธิ์ ผู้ดูแลระบบจะตรวจสอบและอนุมัติให้</p>" +
+    '<form id="access-form" class="stack"><label class="field">ชื่อ-นามสกุล<input name="name" value="' +
+    esc(access.name || me.name) +
+    '" required maxlength="120" autocomplete="name"></label><label class="field">หมายเหตุ (ไม่บังคับ)<input name="note" value="' +
+    esc(access.note) +
+    '" maxlength="300" placeholder="เช่น ครูประจำกลุ่ม ตำบล..."></label>' +
+    error +
+    '<div class="btn-row"><button class="btn" type="submit"' +
+    (access.sending ? " disabled" : "") +
+    ">" +
+    (access.sending ? "กำลังส่งคำขอ..." : "ขอสิทธิ์ใช้งาน") +
+    "</button>" +
+    other +
+    "</div></form>"
+  );
+}
+
+async function requestAccess(form) {
+  const access = state.access;
+  if (!access || access.sending) return;
+  const data = new FormData(form);
+  access.name = String(data.get("name") || "").trim();
+  access.note = String(data.get("note") || "").trim();
+  if (!access.name) {
+    access.error = "กรุณากรอกชื่อ-นามสกุล";
+    return render();
+  }
+  access.sending = true;
+  access.error = "";
+  render();
+  try {
+    const result = await Api.call("requestAccess", { name: access.name, note: access.note });
+    if (result && result.status === "active") return signedIn();
+    state.access = { ...access, pending: true, sending: false };
+  } catch (err) {
+    if (err.status === 401 || err.status === 403) {
+      Api.signOut();
+      state.access = null;
+      state.loginError = err.message;
+    } else {
+      access.sending = false;
+      access.error = err.message || "ส่งคำขอไม่สำเร็จ";
+    }
+  }
+  render();
+}
+
 function renderLogin() {
+  if (state.access && !state.booting) {
+    return (
+      '<div class="login-screen"><section class="login-hero"><div class="brand-mark">' +
+      logoImg("logo") +
+      "<span><strong>EDU APP TRACKER</strong><small>EducationID</small></span></div>" +
+      "<h1>ระบบติดตามการติดตั้งแอปของนักศึกษา</h1>" +
+      '<p class="lead">ศูนย์ส่งเสริมการเรียนรู้ระดับอำเภอวังสามหมอ</p></section>' +
+      '<section class="login-panel"><div class="login-card">' +
+      renderAccess() +
+      "</div></section></div>"
+    );
+  }
   let action = "";
   if (state.booting) action = '<p class="hint" role="status">กำลังตรวจสอบบัญชีและโหลดข้อมูล...</p>';
   else if (!Api.configured()) action = '<p class="error">ยังไม่ได้ตั้งค่า API_URL และ GOOGLE_CLIENT_ID ในไฟล์ js/config.js</p>';
@@ -204,9 +285,9 @@ function renderLogin() {
     "<span><strong>EDU APP TRACKER</strong><small>EducationID</small></span></div>" +
     "<h1>ระบบติดตามการติดตั้งแอปของนักศึกษา</h1>" +
     '<p class="lead">ศูนย์ส่งเสริมการเรียนรู้ระดับอำเภอวังสามหมอ</p>' +
-    '<ul class="hero-list"><li>ครูบันทึกสถานะของนักศึกษาในความรับผิดชอบ</li><li>ผู้บริหารดูภาพรวมได้จากข้อมูลชุดเดียวกัน</li><li>เข้าได้เฉพาะบัญชี Google ที่ผู้ดูแลระบบเพิ่มไว้</li></ul></section>' +
+    '<ul class="hero-list"><li>ครูบันทึกสถานะของนักศึกษาในความรับผิดชอบ</li><li>ผู้บริหารดูภาพรวมได้จากข้อมูลชุดเดียวกัน</li><li>เข้าได้เฉพาะบัญชี Google ที่ผู้ดูแลระบบอนุมัติแล้ว</li></ul></section>' +
     '<section class="login-panel"><div class="login-card"><h2>เข้าสู่ระบบ</h2>' +
-    '<p class="sub">ใช้บัญชี Google ที่ผู้ดูแลระบบเพิ่มไว้ให้</p>' +
+    '<p class="sub">ใช้บัญชี Google ของคุณ ถ้ายังไม่มีสิทธิ์ ระบบจะให้กดขอสิทธิ์ใช้งาน</p>' +
     action +
     (state.loginError ? '<p class="error" role="alert">' + esc(state.loginError) + "</p>" : "") +
     retry +
@@ -234,6 +315,7 @@ function normalizeDb(data) {
     students: Array.isArray(src.students) ? src.students : [],
     reports: Array.isArray(src.reports) ? src.reports : [],
     users: Array.isArray(src.users) ? src.users : [],
+    requests: Array.isArray(src.requests) ? src.requests : [],
   };
 }
 
@@ -263,6 +345,12 @@ async function loadData() {
   } catch (err) {
     state.booting = false;
     state.user = null;
+    if (err.code === "no_access" || err.code === "pending") {
+      state.access = { pending: err.code === "pending", name: "", note: "", sending: false, error: "" };
+      state.loginError = "";
+      render();
+      return;
+    }
     if (err.status === 401 || err.status === 403) Api.signOut();
     state.loginError = err && err.message ? err.message : "โหลดข้อมูลไม่สำเร็จ";
     render();
@@ -271,6 +359,7 @@ async function loadData() {
 
 function signedIn() {
   state.booting = true;
+  state.access = null;
   state.loginError = "";
   render();
   return loadData();
@@ -967,11 +1056,12 @@ function renderImportPanel() {
 }
 
 function renderAdmin() {
+  const pending = (db.requests || []).length;
   const tabs = [
     ["teachers", "ครู"],
     ["levels", "ระดับการศึกษา"],
     ["students", "นักศึกษา"],
-    ["users", "บัญชีผู้ใช้"],
+    ["users", "บัญชีผู้ใช้" + (pending ? " · รออนุมัติ " + pending : "")],
   ]
     .map(
       ([id, label]) =>
@@ -1094,8 +1184,52 @@ function renderStudentsAdmin() {
   );
 }
 
+function renderRequests() {
+  const rows = [...(db.requests || [])].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  if (!rows.length) return "";
+  return (
+    '<div class="panel-head"><div><h2>คำขอสิทธิ์ใช้งาน</h2><p>' +
+    rows.length +
+    " รายการรออนุมัติ ตรวจว่าเป็นครูจริงก่อนกดอนุมัติ แล้วเลือกชื่อครูที่เชื่อมให้ถูกคน</p></div></div>" +
+    '<div class="table-wrap" style="margin-bottom:18px"><table><thead><tr><th>อีเมล Google</th><th>ชื่อที่กรอก</th><th>หมายเหตุ</th><th>ส่งเมื่อ</th><th>การจัดการ</th></tr></thead><tbody>' +
+    rows
+      .map(
+        (r) =>
+          "<tr><td>" +
+          esc(r.email) +
+          "</td><td>" +
+          esc(r.name) +
+          "</td><td>" +
+          esc(r.note || "-") +
+          "</td><td>" +
+          esc(formatDate(r.created_at)) +
+          '</td><td><div class="row-actions"><button type="button" class="btn small" data-action="approve-request" data-id="' +
+          esc(r.id) +
+          '">อนุมัติ</button><button type="button" class="btn secondary small" data-action="reject-request" data-id="' +
+          esc(r.id) +
+          '">ปฏิเสธ</button></div></td></tr>'
+      )
+      .join("") +
+    "</tbody></table></div>"
+  );
+}
+
+function guessTeacherId(name) {
+  const key = (value) =>
+    String(value || "")
+      .replace(/^\s*(ครู|อาจารย์)\s*/, "")
+      .replace(/^\s*(นางสาว|น\.ส\.|นาง|นาย)\s*/, "")
+      .replace(/\s+/g, "");
+  const want = key(name);
+  if (!want) return "";
+  const taken = new Set(db.users.filter((u) => u.role === "teacher").map((u) => u.teacher_id));
+  const hit = db.teachers.find((t) => t.is_active && !taken.has(t.id) && key(t.name) === want);
+  return hit ? hit.id : "";
+}
+
 function renderUsers() {
   return (
+    renderRequests() +
     '<div class="panel-head"><div><h2>บัญชีผู้ใช้</h2><p>เข้าระบบได้เฉพาะบัญชี Google ที่อีเมลตรงกับรายการนี้ บทบาทกำหนดว่าเห็นข้อมูลอะไรได้บ้าง</p></div><button type="button" class="btn small" data-action="edit-user">เพิ่มบัญชี</button></div>' +
     '<div class="table-wrap"><table><thead><tr><th>อีเมล Google</th><th>ชื่อที่แสดง</th><th>บทบาท</th><th>ครูที่เชื่อม</th><th>การจัดการ</th></tr></thead><tbody>' +
     db.users
@@ -1284,7 +1418,7 @@ function confirmBox(modal) {
     '<div class="btn-row"><button type="button" class="btn danger" data-action="confirm-delete"' +
     (modal.saving ? " disabled" : "") +
     ">" +
-    (modal.saving ? "กำลังลบ..." : "ยืนยันการลบ") +
+    (modal.saving ? "กำลังบันทึก..." : modal.confirmLabel || "ยืนยันการลบ") +
     '</button><button type="button" class="btn secondary" data-action="close-modal">ยกเลิก</button></div>'
   );
 }
@@ -1368,12 +1502,17 @@ function studentForm(modal) {
 function userForm(modal) {
   const draft = modal.draft;
   const showTeacher = draft.role === "teacher";
+  const request = modal.requestId ? (db.requests || []).find((r) => r.id === modal.requestId) : null;
   return (
     "<h2>" +
-    (modal.id ? "แก้ไขบัญชี" : "เพิ่มบัญชี") +
-    '</h2><form id="user-form" class="stack"><label class="field">อีเมล Google<input name="email" type="email" value="' +
+    (request ? "อนุมัติคำขอสิทธิ์" : modal.id ? "แก้ไขบัญชี" : "เพิ่มบัญชี") +
+    '</h2><form id="user-form" class="stack">' +
+    (request && request.note ? '<p class="hint">หมายเหตุจากผู้ขอ: ' + esc(request.note) + "</p>" : "") +
+    '<label class="field">อีเมล Google<input name="email" type="email" value="' +
     esc(draft.email) +
-    '" required autocomplete="off" placeholder="name@gmail.com"></label><label class="field">ชื่อที่แสดง<input name="name" value="' +
+    '" required autocomplete="off" placeholder="name@gmail.com"' +
+    (request ? " readonly" : "") +
+    '></label><label class="field">ชื่อที่แสดง<input name="name" value="' +
     esc(draft.name) +
     '" required></label><label class="field">บทบาท<select name="role"' +
     (modal.id === state.user.id ? " disabled" : "") +
@@ -1391,7 +1530,9 @@ function userForm(modal) {
         "</select></label>"
       : "") +
     (modal.error ? '<p class="error">' + esc(modal.error) + "</p>" : "") +
-    '<div class="btn-row">' + submitBtn("บันทึก") + '<button class="btn secondary" type="button" data-action="close-modal">ยกเลิก</button></div></form>'
+    '<div class="btn-row">' +
+    submitBtn(request ? "อนุมัติ" : "บันทึก") +
+    '<button class="btn secondary" type="button" data-action="close-modal">ยกเลิก</button></div></form>'
   );
 }
 
@@ -1575,14 +1716,20 @@ function saveUser(form) {
     draft,
     (result) => {
       upsertLocal(db.users, result.user);
+      db.requests = (db.requests || []).filter((r) => r.email !== result.user.email);
       if (result.me) state.user = result.me;
     },
-    "บันทึกบัญชีแล้ว"
+    state.modal.requestId ? "อนุมัติคำขอแล้ว" : "บันทึกบัญชีแล้ว"
   );
 }
 
 function deleteMaster() {
   const { target, id } = state.modal;
+  if (target === "request") {
+    return submitModal("rejectRequest", { id }, null, () => {
+      db.requests = (db.requests || []).filter((r) => r.id !== id);
+    }, "ปฏิเสธคำขอแล้ว");
+  }
   if (target === "report") {
     const row = db.reports.find((r) => r.id === id);
     if (!canEditReport(row)) return closeModal();
@@ -1675,6 +1822,7 @@ function onClick(event) {
     Api.signOut();
     state.user = null;
     state.modal = null;
+    state.access = null;
     state.loginError = "";
     db = Edu.emptyData();
     clearEvidence();
@@ -1792,6 +1940,29 @@ function onClick(event) {
       draft: user
         ? { email: user.email || "", name: user.name, role: user.role, teacher_id: user.teacher_id || "" }
         : { email: "", name: "", role: "officer", teacher_id: "" },
+    });
+  }
+  if (action === "approve-request") {
+    const request = (db.requests || []).find((r) => r.id === el.dataset.id);
+    if (!request) return;
+    return openModal({
+      type: "user",
+      id: null,
+      requestId: request.id,
+      error: "",
+      draft: { email: request.email, name: request.name, role: "teacher", teacher_id: guessTeacherId(request.name) },
+    });
+  }
+  if (action === "reject-request") {
+    const request = (db.requests || []).find((r) => r.id === el.dataset.id);
+    if (!request) return;
+    return openModal({
+      type: "confirm",
+      target: "request",
+      id: request.id,
+      title: "ปฏิเสธคำขอสิทธิ์",
+      message: "ต้องการปฏิเสธคำขอของ " + request.name + " (" + request.email + ") ใช่หรือไม่ ผู้ขอจะยังส่งคำขอใหม่ได้",
+      confirmLabel: "ปฏิเสธคำขอ",
     });
   }
   if (action === "delete-master") {
@@ -2019,6 +2190,7 @@ function onInput(event) {
 function onSubmit(event) {
   event.preventDefault();
   const id = event.target.id;
+  if (id === "access-form") return requestAccess(event.target);
   if (id === "record-form") return doSave();
   if (id === "edit-form") {
     const row = db.reports.find((r) => r.id === state.modal.id);

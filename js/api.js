@@ -102,9 +102,15 @@ const Api = (function () {
     google.accounts.id.renderButton(el, { theme: "outline", size: "large", shape: "pill", text: "signin_with", locale: "th" });
   }
 
-  function apiError(message, status) {
+  function profile() {
+    const c = hasToken() ? claims(token) : {};
+    return { email: String(c.email || ""), name: String(c.name || "") };
+  }
+
+  function apiError(message, status, code) {
     const err = new Error(message);
     err.status = status;
+    err.code = code || "";
     return err;
   }
 
@@ -136,12 +142,12 @@ const Api = (function () {
     if (!out || !out.ok) {
       const status = (out && out.status) || 500;
       if (status === 401) signOut();
-      throw apiError((out && out.error) || "ทำรายการไม่สำเร็จ", status);
+      throw apiError((out && out.error) || "ทำรายการไม่สำเร็จ", status, out && out.code);
     }
     return out.result;
   }
 
-  return { configured, restore, hasToken, mountButton, call, signOut };
+  return { configured, restore, hasToken, profile, mountButton, call, signOut };
 })();
 
 globalThis.Api = Api;
