@@ -2,7 +2,7 @@
  * ทั้งสองค่านี้ไม่ใช่ความลับ เปิดให้คนเห็นได้ สิทธิ์จริงถูกตรวจที่ Apps Script */
 globalThis.EDU_CONFIG = {
   // URL ของ Apps Script Web App ที่ได้ตอน Deploy (ลงท้ายด้วย /exec)
-  API_URL: "",
+  API_URL: "https://script.google.com/macros/s/AKfycbx-888P3kEqphoyGwoHibPxdrGEs1BD8HQF4ZJe9skGyyAjMcGi_bxlCvpvFd4gIZ7F_g/exec",
   // OAuth Client ID ชนิด Web application จาก Google Cloud Console
   GOOGLE_CLIENT_ID: "235680391707-jq5qncjqfah3vmqe5iv2a3q9rpn6v0s0.apps.googleusercontent.com",
 };
