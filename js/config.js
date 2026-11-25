@@ -4,5 +4,5 @@ globalThis.EDU_CONFIG = {
   // URL ของ Apps Script Web App ที่ได้ตอน Deploy (ลงท้ายด้วย /exec)
   API_URL: "",
   // OAuth Client ID ชนิด Web application จาก Google Cloud Console
-  GOOGLE_CLIENT_ID: "",
+  GOOGLE_CLIENT_ID: "235680391707-jq5qncjqfah3vmqe5iv2a3q9rpn6v0s0.apps.googleusercontent.com",
 };
